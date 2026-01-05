@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid (v5.6 - Status Feedback)
+# Script: FFmpeg-Easy-Unraid (v5.7 - Clean Logs & SVT Fix)
 # Author: metronade
 # ==============================================================================
 
@@ -55,7 +55,6 @@ configure_settings() {
     fi
 
     # C) CPU Safety & Thread Logic
-    # We calculate host/container cores to detect pinning
     local host_cores=$(nproc --all)
     local container_cores=$(nproc)
     local pinning_active=0
@@ -79,8 +78,6 @@ configure_settings() {
     else
         # --- MANUAL MODE OR GPU ---
         FINAL_THREADS="$THREADS_INPUT"
-        
-        # New: Explicit feedback for Manual Mode + No Pinning
         if [[ "$METHOD" == *"cpu"* ]]; then
             if [ "$pinning_active" -eq 0 ] && [ "$FINAL_THREADS" -gt 0 ]; then
                  echo "[INIT] NO Pinning detected."
@@ -124,10 +121,12 @@ check_hardware() {
 
 get_ffmpeg_cmd() {
     local input="$1"; local output="$2"
-    local cmd_prefix=(nice -n 19 ffmpeg -hide_banner -loglevel error -stats -y)
+    
+    # REMOVED 'nice -n 19' to prevent conflicts with SVT-AV1 thread priorities
+    # We rely on CPU limits/pinning instead.
+    local cmd_prefix=(ffmpeg -hide_banner -loglevel error -stats -y)
     local audio_sub_args="${CUSTOM_ARGS:--c:a copy -c:s copy}"
     
-    # SAFETY LOGIC (x265 vs others)
     local x265_safe_arg=""
     local generic_thread_arg=""
 
@@ -204,7 +203,10 @@ for input_file in "${FILES[@]}"; do
     current_in_size=$(stat -c%s "$input_file")
     
     CMD_STR=$(get_ffmpeg_cmd "$input_file" "$out_file")
-    eval "$CMD_STR"
+    
+    # EXECUTION: We pipe stderr to grep to filter out known harmless warnings
+    # This cleans up the log for Svt-AV1 and x265 warnings
+    eval "$CMD_STR 2> >(grep -v -e 'Failed to set thread priority' -e 'set_mempolicy' >&2)"
 
     if [ $? -eq 0 ]; then
         echo "[DONE] Encoding success."
