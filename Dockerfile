@@ -2,10 +2,10 @@
 # Dockerfile: FFmpeg-Easy-Unraid
 # Project:    Simple H265 and AV1 Batch Transcoder
 # Author:     metronade
-# Base:       Ubuntu 22.04 + FFmpeg 6.x
+# Base:       Ubuntu 24.04 (Includes FFmpeg 6.1 native)
 # ==============================================================================
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # Metadata
 LABEL maintainer="metronade"
@@ -14,13 +14,11 @@ LABEL description="Simple H265 and AV1 Batch Transcoder"
 ENV DEBIAN_FRONTEND=noninteractive
 
 # --- CONFIG DEFAULTS ---
-# Method: cpu_h265 | cpu_av1 | nvidia_h265 | nvidia_av1 | intel_h265 | intel_av1
 ENV ENCODE_METHOD=cpu_h265
 ENV ENCODE_PRESET=default
-# 0 = Auto-Detect (Checks for pinning)
 ENV ENCODE_THREADS=0
 
-# Custom Arguments (Advanced users only). If empty: "-c:a copy -c:s copy"
+# Custom Arguments
 ENV FFMPEG_CUSTOM_ARGS=""
 
 # Unraid Permissions
@@ -31,22 +29,20 @@ ENV UNRAID_GID=100
 ENV ENCODE_CRF=""
 ENV ENCODE_CQ=""
 
-# 1. Install Dependencies & PPA (FFmpeg 6.x soft-pin)
+# 1. Install Dependencies & FFmpeg & Drivers
+# Ubuntu 24.04 hat FFmpeg 6.1+ bereits in den offiziellen Quellen (universe).
+# Wir installieren auch die Intel Treiber für QSV.
 RUN apt-get update && \
-    apt-get install -y software-properties-common curl gpg wget && \
-    add-apt-repository ppa:savoury1/ffmpeg4 -y && \
-    add-apt-repository ppa:savoury1/ffmpeg6 -y && \
-    apt-get update
-
-# 2. Install FFmpeg & Drivers & Tools (bc for calc)
-RUN apt-get install -y \
+    apt-get install -y --no-install-recommends \
     ffmpeg \
-    intel-media-driver \
-    i965-va-driver-shaders \
+    intel-media-va-driver \
+    i965-va-driver \
     libva-drm2 \
     libva-x11-2 \
     vainfo \
     bc \
+    curl \
+    wget \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
