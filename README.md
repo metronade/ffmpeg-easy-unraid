@@ -43,3 +43,116 @@ When adding or editing this container in Unraid:
 3. Add the following text to the end of the line (separated by a space):
    ```text
    --runtime=nvidia
+
+*(Note: Do not remove `--cap-add=SYS_NICE` if it is already there. Just add this after it.)*
+
+4. Find the Variable **"Nvidia Visible Devices"** (in Advanced View).
+* Set this to your **GPU UUID** (recommended, found in the Nvidia Driver Plugin settings).
+* OR set it to `all` if you only have one GPU.
+
+
+5. **Apply** the changes.
+
+The container will now perform a hardware check on startup. If successful, logs will show `[INIT] Hardware check passed`.
+
+---
+
+## ⚖️ CPU vs. GPU Encoding: What should I choose?
+
+* **Choose CPU Encoding (`cpu_h265`)** if you want the **best possible compression efficiency and quality preservation**. CPU encoders (libx265) are generally smarter than GPU encoders, resulting in smaller files for the same visual quality. Ideally, use this for long-term archiving.
+* **Choose GPU Encoding (`nvidia_...` / `intel_...`)** if **speed** is your priority. GPUs can process files much faster, but the file size might be slightly larger to achieve the same visual quality compared to CPU encoding.
+
+---
+
+## ⚙️ Prerequisites
+
+### 1. For Intel GPU Encoding (QuickSync / Arc)
+
+* **Device Mapping:** You must pass the device `/dev/dri` to the container.
+* **AV1 Support:** Requires an **Intel Arc GPU** or newer iGPU (Meteor Lake+).
+
+### 2. For CPU Encoding
+
+* **Recommendation:** Use **CPU Pinning** in the Unraid Docker settings to assign specific cores. If you forget this, the script's safety mode will engage (limiting to 50% load).
+
+---
+
+## 🚀 Configuration & Environment Variables
+
+The container is controlled via Environment Variables.
+
+### A Note on Defaults
+
+> **Why these default values?**
+> The default settings (CRF 18 for H.265 / CRF 24 for AV1) are chosen based on extensive personal testing. In my experience, these values represent the **"Sweet Spot"**: they provide significant file size reduction while maintaining visual quality that is virtually indistinguishable from the source.
+> Unless you have specific needs, I recommend leaving the Quality fields empty to use these smart defaults.
+
+### Variable List
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ENCODE_METHOD` | `cpu_h265` | **The Encoder Engine.**<br>
+
+<br>Options: `cpu_h265`, `cpu_av1`, `nvidia_h265`, `nvidia_av1`, `intel_h265`, `intel_av1`. |
+| `ENCODE_PRESET` | `default` | **Speed vs. Efficiency.**<br>
+
+<br>`default` automatically picks `medium` (CPU) or `p4` (Nvidia).<br>
+
+<br>Manual options: `slow`, `fast`, `p1`-`p7` (Nvidia), `0`-`13` (SVT-AV1). |
+| `ENCODE_THREADS` | `0` | **CPU Usage.**<br>
+
+<br>`0` = Auto-Detect (Checks for pinning).<br>
+
+<br>Set a number (e.g., `4`) to force a specific thread count. Only affects CPU encoding. |
+| `ENCODE_CRF` | *(Smart)* | **Quality for CPU/Intel.**<br>
+
+<br>Lower value = Better Quality, Larger File.<br>
+
+<br>Defaults: `18` (H.265), `24` (AV1). |
+| `ENCODE_CQ` | *(Smart)* | **Quality for Nvidia.**<br>
+
+<br>Lower value = Better Quality, Larger File.<br>
+
+<br>Defaults: `19` (H.265), `24` (AV1). |
+| `FFMPEG_CUSTOM_ARGS` | *(Empty)* | **Audio/Subtitles Override.**<br>
+
+<br>Default behavior is `-c:a copy -c:s copy`.<br>
+
+<br>Use this to convert audio, e.g., `-c:a aac -b:a 192k`. |
+| `NVIDIA_VISIBLE_DEVICES` | `all` | **GPU Selection.**<br>
+
+<br>Set to your GPU UUID (e.g., `GPU-xxxx...`) or `all`. |
+| `UNRAID_UID` | `99` | User ID for file permissions (Standard Unraid: 99). |
+| `UNRAID_GID` | `100` | Group ID for file permissions (Standard Unraid: 100). |
+
+---
+
+## 📂 Folder Structure (Mappings)
+
+You need to map two volumes in Docker/Unraid:
+
+1. **Input:** Map your source media folder to `/import`.
+* *Note:* The container needs **Read/Write** access to move finished files to `/import/finished`.
+
+
+2. **Output:** Map your destination folder to `/export`.
+
+**Example Workflow:**
+
+1. You place a TV Show folder `MySeries/Season 1/Episode 1.mkv` in `/import`.
+2. Script converts it and saves the new version to `/export/MySeries/Season 1/Episode 1.mkv`.
+3. Script moves the original to `/import/finished/MySeries/Season 1/Episode 1.mkv`.
+
+---
+
+## 📜 License
+
+Distributed under the **MIT License**. See `LICENSE` for more information.
+
+---
+
+**Author:** [metronade](https://github.com/metronade)
+
+```
+
+```
