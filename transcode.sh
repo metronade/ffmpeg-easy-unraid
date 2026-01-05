@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid (v5.4 - Thread Fix)
+# Script: FFmpeg-Easy-Unraid (v5.5 - x265 Safety Fix)
 # Author: metronade
 # ==============================================================================
 
@@ -55,25 +55,21 @@ configure_settings() {
     fi
 
     # C) CPU Safety Logic
-    # Only calculate this if User set threads to 0 (Auto) AND uses CPU encoding
     if [ "$THREADS_INPUT" -eq 0 ] && [[ "$METHOD" == *"cpu"* ]]; then
         local host_cores=$(nproc --all)
         local container_cores=$(nproc)
         
         if [ "$container_cores" -lt "$host_cores" ]; then
-            # Pinning detected: Let FFmpeg auto-detect based on assigned cores
-            echo "[INIT] CPU Pinning detected ($container_cores cores assigned). Using max performance."
+            echo "[INIT] CPU Pinning detected ($container_cores assigned). Using max performance."
             FINAL_THREADS=0 
         else
-            # No Pinning: Limit to 50%
             local safe_limit=$((host_cores / 2))
             [ "$safe_limit" -lt 1 ] && safe_limit=1
-            echo "[INIT] NO Pinning detected (Container sees all $host_cores cores)."
+            echo "[INIT] NO Pinning detected (Seen $host_cores cores)."
             echo "[INIT] SAFETY MODE: Limiting to $safe_limit threads (50%) to prevent freeze."
             FINAL_THREADS=$safe_limit
         fi
     else
-        # User forced a value OR using GPU (keep default 0)
         FINAL_THREADS="$THREADS_INPUT"
     fi
 }
@@ -113,11 +109,17 @@ get_ffmpeg_cmd() {
     local cmd_prefix=(nice -n 19 ffmpeg -hide_banner -loglevel error -stats -y)
     local audio_sub_args="${CUSTOM_ARGS:--c:a copy -c:s copy}"
     
-    # THREAD FIX: Only add -threads flag if value is > 0
-    # If 0, we omit it entirely so FFmpeg uses its internal auto-detection correctly.
-    local thread_arg=""
+    # SAFETY FIX:
+    # -threads N crashes x265 if N is too high for the resolution.
+    # We use -x265-params pools=N instead for x265, which is safe.
+    # For AV1/Others, we stick to -threads.
+    
+    local x265_safe_arg=""
+    local generic_thread_arg=""
+
     if [ "$FINAL_THREADS" -gt 0 ]; then
-        thread_arg="-threads $FINAL_THREADS"
+        x265_safe_arg="-x265-params pools=$FINAL_THREADS"
+        generic_thread_arg="-threads $FINAL_THREADS"
     fi
 
     case "$METHOD" in
@@ -125,8 +127,8 @@ get_ffmpeg_cmd() {
         "nvidia_h265") echo "${cmd_prefix[@]} -hwaccel cuda -hwaccel_output_format cuda -i \"$input\" -map 0 -c:v hevc_nvenc -cq $CQ_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
         "intel_av1")   echo "${cmd_prefix[@]} -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -i \"$input\" -map 0 -c:v av1_qsv -global_quality $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
         "intel_h265")  echo "${cmd_prefix[@]} -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -i \"$input\" -map 0 -c:v hevc_vaapi -vf 'format=nv12,hwupload' -qp $CRF_VALUE $audio_sub_args \"$output\"" ;;
-        "cpu_av1")     echo "${cmd_prefix[@]} -i \"$input\" $thread_arg -map 0 -c:v libsvtav1 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
-        *)             echo "${cmd_prefix[@]} -i \"$input\" $thread_arg -map 0 -c:v libx265 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
+        "cpu_av1")     echo "${cmd_prefix[@]} -i \"$input\" $generic_thread_arg -map 0 -c:v libsvtav1 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
+        *)             echo "${cmd_prefix[@]} -i \"$input\" $x265_safe_arg -map 0 -c:v libx265 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
     esac
 }
 
@@ -148,7 +150,6 @@ check_hardware
 
 echo "--------------------------------------------------------"
 echo "[INFO] Scanning '/import' for video files... Please wait."
-echo "       (Large libraries might take a moment)"
 
 FILES=()
 while IFS= read -r -d '' file; do
@@ -158,7 +159,7 @@ done < <(find "$SOURCE_DIR" -path "$FINISHED_DIR" -prune -o -type f \( -iname "*
 TOTAL_FILES=${#FILES[@]}
 
 if [ "$TOTAL_FILES" -eq 0 ]; then
-    echo "[INFO] No files found to process. Exiting."
+    echo "[INFO] No files found. Exiting."
     exit 0
 fi
 
@@ -200,7 +201,7 @@ for input_file in "${FILES[@]}"; do
         chown "$TARGET_UID":"$TARGET_GID" "$out_file"
         chmod 666 "$out_file"
         
-        echo "[MOVE] Moving source to finished directory..."
+        echo "[MOVE] Source -> Finished"
         mkdir -p "$(dirname "$finish_dest")"
         chown "$TARGET_UID":"$TARGET_GID" "$(dirname "$finish_dest")"
         mv "$input_file" "$finish_dest"
