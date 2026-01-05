@@ -1,6 +1,6 @@
 # FFmpeg-Easy-Unraid
 
-![Icon](./icon.png)
+<img src="./icon.png" width="150" height="150">
 
 **A "Set and Forget" Batch Transcoder designed for Unraid.** Convert your media library (Movies, TV Series) to modern, space-saving formats (H.265/HEVC or AV1) with ease.
 
