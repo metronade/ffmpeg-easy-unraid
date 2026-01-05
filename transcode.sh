@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid (v5.3 - UX Update)
+# Script: FFmpeg-Easy-Unraid (v5.4 - Thread Fix)
 # Author: metronade
 # ==============================================================================
 
@@ -55,19 +55,25 @@ configure_settings() {
     fi
 
     # C) CPU Safety Logic
+    # Only calculate this if User set threads to 0 (Auto) AND uses CPU encoding
     if [ "$THREADS_INPUT" -eq 0 ] && [[ "$METHOD" == *"cpu"* ]]; then
         local host_cores=$(nproc --all)
         local container_cores=$(nproc)
+        
         if [ "$container_cores" -lt "$host_cores" ]; then
-            echo "[INIT] CPU Pinning detected ($container_cores cores). Using max performance."
-            FINAL_THREADS=0
+            # Pinning detected: Let FFmpeg auto-detect based on assigned cores
+            echo "[INIT] CPU Pinning detected ($container_cores cores assigned). Using max performance."
+            FINAL_THREADS=0 
         else
+            # No Pinning: Limit to 50%
             local safe_limit=$((host_cores / 2))
             [ "$safe_limit" -lt 1 ] && safe_limit=1
-            echo "[INIT] NO Pinning detected. SAFETY MODE: Limiting to $safe_limit threads (50%)."
+            echo "[INIT] NO Pinning detected (Container sees all $host_cores cores)."
+            echo "[INIT] SAFETY MODE: Limiting to $safe_limit threads (50%) to prevent freeze."
             FINAL_THREADS=$safe_limit
         fi
     else
+        # User forced a value OR using GPU (keep default 0)
         FINAL_THREADS="$THREADS_INPUT"
     fi
 }
@@ -90,7 +96,6 @@ check_paths() {
 
 check_hardware() {
     local test_cmd=""
-    # Suppress verbose hardware check errors to keep log clean
     case "$METHOD" in
         "nvidia_"*) test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_nvenc -f null -" ;;
         "intel_"*)  test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_vaapi -f null -" ;;
@@ -105,17 +110,23 @@ check_hardware() {
 
 get_ffmpeg_cmd() {
     local input="$1"; local output="$2"
-    # Added -hide_banner and -loglevel error to reduce spam, but kept -stats for progress
     local cmd_prefix=(nice -n 19 ffmpeg -hide_banner -loglevel error -stats -y)
     local audio_sub_args="${CUSTOM_ARGS:--c:a copy -c:s copy}"
+    
+    # THREAD FIX: Only add -threads flag if value is > 0
+    # If 0, we omit it entirely so FFmpeg uses its internal auto-detection correctly.
+    local thread_arg=""
+    if [ "$FINAL_THREADS" -gt 0 ]; then
+        thread_arg="-threads $FINAL_THREADS"
+    fi
 
     case "$METHOD" in
         "nvidia_av1")  echo "${cmd_prefix[@]} -hwaccel cuda -hwaccel_output_format cuda -i \"$input\" -map 0 -c:v av1_nvenc -cq $CQ_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
         "nvidia_h265") echo "${cmd_prefix[@]} -hwaccel cuda -hwaccel_output_format cuda -i \"$input\" -map 0 -c:v hevc_nvenc -cq $CQ_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
         "intel_av1")   echo "${cmd_prefix[@]} -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -i \"$input\" -map 0 -c:v av1_qsv -global_quality $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
         "intel_h265")  echo "${cmd_prefix[@]} -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -i \"$input\" -map 0 -c:v hevc_vaapi -vf 'format=nv12,hwupload' -qp $CRF_VALUE $audio_sub_args \"$output\"" ;;
-        "cpu_av1")     echo "${cmd_prefix[@]} -i \"$input\" -threads $FINAL_THREADS -map 0 -c:v libsvtav1 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
-        *)             echo "${cmd_prefix[@]} -i \"$input\" -threads $FINAL_THREADS -map 0 -c:v libx265 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
+        "cpu_av1")     echo "${cmd_prefix[@]} -i \"$input\" $thread_arg -map 0 -c:v libsvtav1 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
+        *)             echo "${cmd_prefix[@]} -i \"$input\" $thread_arg -map 0 -c:v libx265 -crf $CRF_VALUE -preset $PRESET $audio_sub_args \"$output\"" ;;
     esac
 }
 
@@ -139,7 +150,6 @@ echo "--------------------------------------------------------"
 echo "[INFO] Scanning '/import' for video files... Please wait."
 echo "       (Large libraries might take a moment)"
 
-# 1. Load files into an array to count them first
 FILES=()
 while IFS= read -r -d '' file; do
     FILES+=("$file")
@@ -158,7 +168,6 @@ echo "--------------------------------------------------------"
 COUNT_SUCCESS=0; COUNT_FAILED=0
 CURRENT_INDEX=0
 
-# 2. Process the array
 for input_file in "${FILES[@]}"; do
     ((CURRENT_INDEX++))
     
@@ -179,10 +188,7 @@ for input_file in "${FILES[@]}"; do
 
     current_in_size=$(stat -c%s "$input_file")
     
-    # Generate Command
     CMD_STR=$(get_ffmpeg_cmd "$input_file" "$out_file")
-    
-    # Execute (Filter stderr if needed, but usually --cap-add fixes the noise)
     eval "$CMD_STR"
 
     if [ $? -eq 0 ]; then
@@ -206,7 +212,6 @@ for input_file in "${FILES[@]}"; do
     fi
 done
 
-# STATS
 DURATION=$((SECONDS - START_TIME))
 H=$((DURATION/3600)); M=$(( (DURATION%3600)/60 )); S=$((DURATION%60))
 
