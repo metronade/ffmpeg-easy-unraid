@@ -1,0 +1,50 @@
+services:
+  ffmpeg-easy:
+    container_name: ffmpeg-easy-unraid
+    image: metronade/ffmpeg-easy-unraid:latest
+    
+    # IMPORTANT: Set to "no" because this container stops after processing 
+    # the queue ("Run-Once" workflow). 
+    # Use "always" only if you want it to restart immediately after finishing (not recommended).
+    restart: "no"
+
+    # IMPORTANT: Required to suppress warnings and allow process prioritization
+    cap_add:
+      - SYS_NICE
+
+    environment:
+      # --- Configuration ---
+      - ENCODE_METHOD=cpu_h265       # Options: cpu_h265, cpu_av1, nvidia_h265, intel_av1, etc.
+      - ENCODE_PRESET=default        # default, slow, fast, p4, p7...
+      - ENCODE_THREADS=0             # 0 = Auto/Safety Mode, Number = Force specific thread count
+      - ENCODE_CRF=                  # Leave empty for Smart Default (18/24)
+      - ENCODE_CQ=                   # Leave empty for Smart Default (Nvidia)
+      - FFMPEG_CUSTOM_ARGS=          # E.g. "-c:a aac" for audio conversion
+
+      # --- Permissions ---
+      # Standard Linux users are often 1000:1000. 
+      # On Unraid, it is usually 99:100. Adjust this to match your host file owner!
+      - UNRAID_UID=1000
+      - UNRAID_GID=1000
+      
+      # --- Nvidia Environment (Only needed for Nvidia) ---
+      # - NVIDIA_VISIBLE_DEVICES=all
+      # - NVIDIA_DRIVER_CAPABILITIES=all
+
+    volumes:
+      # Adjust the paths on the left side to match your host directories
+      - /path/to/your/media:/import
+      - /path/to/output/folder:/export
+
+    # --- HARDWARE: INTEL (Uncomment for QuickSync/Arc support) ---
+    # devices:
+    #   - /dev/dri:/dev/dri
+
+    # --- HARDWARE: NVIDIA (Uncomment for NVENC support) ---
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
