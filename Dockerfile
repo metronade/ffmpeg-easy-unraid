@@ -25,13 +25,12 @@ ENV FFMPEG_CUSTOM_ARGS=""
 ENV UNRAID_UID=99
 ENV UNRAID_GID=100
 
-# Leave empty for smart defaults
-ENV ENCODE_CRF=""
-ENV ENCODE_CQ=""
+# --- NVIDIA RUNTIME SUPPORT ---
+# These variables tell the Nvidia Container Runtime to inject libraries automatically
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 
 # 1. Install Dependencies & FFmpeg & Drivers
-# Ubuntu 24.04 hat FFmpeg 6.1+ bereits in den offiziellen Quellen (universe).
-# Wir installieren auch die Intel Treiber für QSV.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
