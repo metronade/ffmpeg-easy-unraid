@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid
+# Script: FFmpeg-Easy-Unraid (v5.3 - UX Update)
 # Author: metronade
 # ==============================================================================
 
@@ -59,7 +59,7 @@ configure_settings() {
         local host_cores=$(nproc --all)
         local container_cores=$(nproc)
         if [ "$container_cores" -lt "$host_cores" ]; then
-            echo "[INIT] CPU Pinning detected ($container_cores cores). using max performance."
+            echo "[INIT] CPU Pinning detected ($container_cores cores). Using max performance."
             FINAL_THREADS=0
         else
             local safe_limit=$((host_cores / 2))
@@ -90,23 +90,23 @@ check_paths() {
 
 check_hardware() {
     local test_cmd=""
+    # Suppress verbose hardware check errors to keep log clean
     case "$METHOD" in
-        "nvidia_av1")  test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v av1_nvenc -f null -" ;;
-        "nvidia_h265") test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_nvenc -f null -" ;;
-        "intel_av1")   test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v av1_qsv -f null -" ;;
-        "intel_h265")  test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_vaapi -f null -" ;;
-        "cpu_av1")     test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v libsvtav1 -f null -" ;;
-        *)             test_cmd="true" ;;
+        "nvidia_"*) test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_nvenc -f null -" ;;
+        "intel_"*)  test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_vaapi -f null -" ;;
+        *)          test_cmd="true" ;;
     esac
 
     if ! $test_cmd > /dev/null 2>&1; then
-        echo "[FATAL] Hardware check failed for '$METHOD'. Check GPU/Drivers."; exit 1
+        echo "[FATAL] Hardware check failed for '$METHOD'. Check GPU/Drivers/Permissions."
+        exit 1
     fi
 }
 
 get_ffmpeg_cmd() {
     local input="$1"; local output="$2"
-    local cmd_prefix=(nice -n 19 ffmpeg -nostdin -v error -stats -y)
+    # Added -hide_banner and -loglevel error to reduce spam, but kept -stats for progress
+    local cmd_prefix=(nice -n 19 ffmpeg -hide_banner -loglevel error -stats -y)
     local audio_sub_args="${CUSTOM_ARGS:--c:a copy -c:s copy}"
 
     case "$METHOD" in
@@ -135,11 +135,33 @@ configure_settings
 check_paths
 check_hardware
 
-COUNT_TOTAL=0; COUNT_SUCCESS=0; COUNT_SKIPPED=0; COUNT_FAILED=0
-echo "[INFO] Starting batch processing..."
+echo "--------------------------------------------------------"
+echo "[INFO] Scanning '/import' for video files... Please wait."
+echo "       (Large libraries might take a moment)"
 
-while IFS= read -r -d '' input_file; do
-    ((COUNT_TOTAL++))
+# 1. Load files into an array to count them first
+FILES=()
+while IFS= read -r -d '' file; do
+    FILES+=("$file")
+done < <(find "$SOURCE_DIR" -path "$FINISHED_DIR" -prune -o -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.ts" -o -iname "*.m2ts" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.wmv" \) -print0)
+
+TOTAL_FILES=${#FILES[@]}
+
+if [ "$TOTAL_FILES" -eq 0 ]; then
+    echo "[INFO] No files found to process. Exiting."
+    exit 0
+fi
+
+echo "[INFO] Found $TOTAL_FILES files to process."
+echo "--------------------------------------------------------"
+
+COUNT_SUCCESS=0; COUNT_FAILED=0
+CURRENT_INDEX=0
+
+# 2. Process the array
+for input_file in "${FILES[@]}"; do
+    ((CURRENT_INDEX++))
+    
     rel_path="${input_file#$SOURCE_DIR/}"
     fname_no_ext="$(basename -- "$input_file" | sed 's/\.[^.]*$//')"
     rel_dir=$(dirname "$rel_path")
@@ -147,18 +169,24 @@ while IFS= read -r -d '' input_file; do
     out_file="$EXPORT_DIR/$rel_dir/$fname_no_ext.mkv"
     finish_dest="$FINISHED_DIR/$rel_path"
 
-    echo "[START] $fname_no_ext ($METHOD)"
+    echo ""
+    echo "[PROGRESS] File $CURRENT_INDEX of $TOTAL_FILES"
+    echo "[START] Processing: $fname_no_ext"
     
     mkdir -p "$(dirname "$out_file")"
     chown "$TARGET_UID":"$TARGET_GID" "$(dirname "$out_file")"
     [ -f "$out_file" ] && rm "$out_file"
 
     current_in_size=$(stat -c%s "$input_file")
+    
+    # Generate Command
     CMD_STR=$(get_ffmpeg_cmd "$input_file" "$out_file")
+    
+    # Execute (Filter stderr if needed, but usually --cap-add fixes the noise)
     eval "$CMD_STR"
 
     if [ $? -eq 0 ]; then
-        echo "[DONE] Success."
+        echo "[DONE] Encoding success."
         echo "DONE: $rel_path" >> "$LOG_FILE"
         current_out_size=$(stat -c%s "$out_file")
         SIZE_IN_TOTAL=$(echo "$SIZE_IN_TOTAL + $current_in_size" | bc)
@@ -166,7 +194,7 @@ while IFS= read -r -d '' input_file; do
         chown "$TARGET_UID":"$TARGET_GID" "$out_file"
         chmod 666 "$out_file"
         
-        echo "[MOVE] Source -> Finished"
+        echo "[MOVE] Moving source to finished directory..."
         mkdir -p "$(dirname "$finish_dest")"
         chown "$TARGET_UID":"$TARGET_GID" "$(dirname "$finish_dest")"
         mv "$input_file" "$finish_dest"
@@ -176,7 +204,7 @@ while IFS= read -r -d '' input_file; do
         [ -f "$out_file" ] && rm "$out_file"
         ((COUNT_FAILED++))
     fi
-done < <(find "$SOURCE_DIR" -path "$FINISHED_DIR" -prune -o -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.ts" -o -iname "*.m2ts" -o -iname "*.avi" -o -iname "*.mov" -o -iname "*.wmv" \) -print0)
+done
 
 # STATS
 DURATION=$((SECONDS - START_TIME))
@@ -196,10 +224,6 @@ if [ $COUNT_SUCCESS -gt 0 ]; then
     echo " Input:      $TXT_IN"
     echo " Output:     $TXT_OUT"
     echo " Saved:      $TXT_DIFF ($PERCENT%)"
-else
-    echo " No files processed."
 fi
 echo "========================================================"
-
-if [ "$COUNT_FAILED" -eq 0 ] && [ "$COUNT_TOTAL" -gt 0 ]; then rm "$LOG_FILE"; fi
 exit 0
