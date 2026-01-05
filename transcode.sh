@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid (v5.7 - Clean Logs & SVT Fix)
+# Script: FFmpeg-Easy-Unraid (v6.0 - Nvidia Library Fix)
 # Author: metronade
 # ==============================================================================
 
@@ -64,7 +64,6 @@ configure_settings() {
     fi
 
     if [ "$THREADS_INPUT" -eq 0 ] && [[ "$METHOD" == *"cpu"* ]]; then
-        # --- AUTO / SAFETY MODE ---
         if [ "$pinning_active" -eq 1 ]; then
             echo "[INIT] CPU Pinning detected ($container_cores assigned). Using max performance."
             FINAL_THREADS=0 
@@ -76,7 +75,6 @@ configure_settings() {
             FINAL_THREADS=$safe_limit
         fi
     else
-        # --- MANUAL MODE OR GPU ---
         FINAL_THREADS="$THREADS_INPUT"
         if [[ "$METHOD" == *"cpu"* ]]; then
             if [ "$pinning_active" -eq 0 ] && [ "$FINAL_THREADS" -gt 0 ]; then
@@ -106,6 +104,10 @@ check_paths() {
 }
 
 check_hardware() {
+    # CRITICAL FIX: Refresh library cache.
+    # Unraid injects Nvidia libs at runtime, but Ubuntu might not see them immediately.
+    ldconfig > /dev/null 2>&1
+
     local test_cmd=""
     case "$METHOD" in
         "nvidia_"*) test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_nvenc -f null -" ;;
@@ -113,17 +115,19 @@ check_hardware() {
         *)          test_cmd="true" ;;
     esac
 
-    if ! $test_cmd > /dev/null 2>&1; then
-        echo "[FATAL] Hardware check failed for '$METHOD'. Check GPU/Drivers/Permissions."
+    if ! eval "$test_cmd" > /dev/null 2> /tmp/hw_check.log; then
+        echo "[FATAL] Hardware check failed for '$METHOD'."
+        echo "--------------------------------------------------------"
+        echo "FFmpeg Error Output:"
+        cat /tmp/hw_check.log
+        echo "--------------------------------------------------------"
+        echo "Hint: If using Nvidia, ensure drivers are up to date on host."
         exit 1
     fi
 }
 
 get_ffmpeg_cmd() {
     local input="$1"; local output="$2"
-    
-    # REMOVED 'nice -n 19' to prevent conflicts with SVT-AV1 thread priorities
-    # We rely on CPU limits/pinning instead.
     local cmd_prefix=(ffmpeg -hide_banner -loglevel error -stats -y)
     local audio_sub_args="${CUSTOM_ARGS:--c:a copy -c:s copy}"
     
@@ -204,8 +208,6 @@ for input_file in "${FILES[@]}"; do
     
     CMD_STR=$(get_ffmpeg_cmd "$input_file" "$out_file")
     
-    # EXECUTION: We pipe stderr to grep to filter out known harmless warnings
-    # This cleans up the log for Svt-AV1 and x265 warnings
     eval "$CMD_STR 2> >(grep -v -e 'Failed to set thread priority' -e 'set_mempolicy' >&2)"
 
     if [ $? -eq 0 ]; then
