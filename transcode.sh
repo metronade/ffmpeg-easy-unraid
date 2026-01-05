@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid (v6.1 - Resolution Fix)
+# Script: FFmpeg-Easy-Unraid (v6.2 - Clean Stats Fix)
 # Author: metronade
 # ==============================================================================
 
@@ -109,7 +109,6 @@ check_hardware() {
 
     local test_cmd=""
     # FIX: Increased test resolution from 64x64 to 128x128
-    # Some Nvidia cards (Pascal+) require minimum dimensions for HEVC
     case "$METHOD" in
         "nvidia_"*) test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=128x128 -vframes 1 -c:v hevc_nvenc -f null -" ;;
         "intel_"*)  test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=128x128 -vframes 1 -c:v hevc_vaapi -f null -" ;;
@@ -150,11 +149,15 @@ get_ffmpeg_cmd() {
     esac
 }
 
+# FIX: Switch from 'bc' to 'awk' for proper formatting (0.48 instead of .48)
 format_bytes_dual() {
     local bytes=$1
     if [ -z "$bytes" ] || [ "$bytes" -eq 0 ]; then echo "0.00 GB | 0.00 MB"; return; fi
-    local gb=$(echo "scale=2; $bytes/1073741824" | bc)
-    local mb=$(echo "scale=2; $bytes/1048576" | bc)
+    
+    # Use awk to calculate and format with 2 decimals and leading zeros
+    local gb=$(awk -v b="$bytes" 'BEGIN { printf "%.2f", b/1073741824 }')
+    local mb=$(awk -v b="$bytes" 'BEGIN { printf "%.2f", b/1048576 }')
+    
     echo "${gb} GB | ${mb} MB"
 }
 
@@ -244,8 +247,15 @@ echo " Runtime:    ${H}h ${M}m ${S}s"
 if [ $COUNT_SUCCESS -gt 0 ]; then
     TXT_IN=$(format_bytes_dual $SIZE_IN_TOTAL)
     TXT_OUT=$(format_bytes_dual $SIZE_OUT_TOTAL)
-    TXT_DIFF=$(format_bytes_dual $(echo "$SIZE_IN_TOTAL - $SIZE_OUT_TOTAL" | bc))
+    # Use awk for diff calculation as well to handle negatives cleanly with leading zeros
+    TXT_DIFF=$(awk -v i="$SIZE_IN_TOTAL" -v o="$SIZE_OUT_TOTAL" 'BEGIN { 
+        diff = i - o; 
+        gb = diff / 1073741824; 
+        mb = diff / 1048576; 
+        printf "%.2f GB | %.2f MB", gb, mb 
+    }')
     PERCENT=$(awk "BEGIN {printf \"%.2f\", (($SIZE_IN_TOTAL-$SIZE_OUT_TOTAL)/$SIZE_IN_TOTAL)*100}")
+    
     echo " Input:      $TXT_IN"
     echo " Output:     $TXT_OUT"
     echo " Saved:      $TXT_DIFF ($PERCENT%)"
