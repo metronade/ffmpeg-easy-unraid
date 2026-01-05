@@ -90,38 +90,14 @@ The container is controlled via Environment Variables.
 ### Variable List
 
 | Variable | Default | Description |
-| --- | --- | --- |
-| `ENCODE_METHOD` | `cpu_h265` | **The Encoder Engine.**<br>
-
-<br>Options: `cpu_h265`, `cpu_av1`, `nvidia_h265`, `nvidia_av1`, `intel_h265`, `intel_av1`. |
-| `ENCODE_PRESET` | `default` | **Speed vs. Efficiency.**<br>
-
-<br>`default` automatically picks `medium` (CPU) or `p4` (Nvidia).<br>
-
-<br>Manual options: `slow`, `fast`, `p1`-`p7` (Nvidia), `0`-`13` (SVT-AV1). |
-| `ENCODE_THREADS` | `0` | **CPU Usage.**<br>
-
-<br>`0` = Auto-Detect (Checks for pinning).<br>
-
-<br>Set a number (e.g., `4`) to force a specific thread count. Only affects CPU encoding. |
-| `ENCODE_CRF` | *(Smart)* | **Quality for CPU/Intel.**<br>
-
-<br>Lower value = Better Quality, Larger File.<br>
-
-<br>Defaults: `18` (H.265), `24` (AV1). |
-| `ENCODE_CQ` | *(Smart)* | **Quality for Nvidia.**<br>
-
-<br>Lower value = Better Quality, Larger File.<br>
-
-<br>Defaults: `19` (H.265), `24` (AV1). |
-| `FFMPEG_CUSTOM_ARGS` | *(Empty)* | **Audio/Subtitles Override.**<br>
-
-<br>Default behavior is `-c:a copy -c:s copy`.<br>
-
-<br>Use this to convert audio, e.g., `-c:a aac -b:a 192k`. |
-| `NVIDIA_VISIBLE_DEVICES` | `all` | **GPU Selection.**<br>
-
-<br>Set to your GPU UUID (e.g., `GPU-xxxx...`) or `all`. |
+| :--- | :--- | :--- |
+| `ENCODE_METHOD` | `cpu_h265` | **The Encoder Engine.**<br>Options: `cpu_h265`, `cpu_av1`, `nvidia_h265`, `nvidia_av1`, `intel_h265`, `intel_av1`. |
+| `ENCODE_PRESET` | `default` | **Speed vs. Efficiency.**<br>`default` automatically picks `medium` (CPU) or `p4` (Nvidia).<br>Manual options: `slow`, `fast`, `p1`-`p7` (Nvidia), `0`-`13` (SVT-AV1). |
+| `ENCODE_THREADS` | `0` | **CPU Usage.**<br>`0` = Auto-Detect (Checks for pinning).<br>Set a number (e.g., `4`) to force a specific thread count. Only affects CPU encoding. |
+| `ENCODE_CRF` | *(Smart)* | **Quality for CPU/Intel.**<br>Lower value = Better Quality, Larger File.<br>Defaults: `18` (H.265), `24` (AV1). |
+| `ENCODE_CQ` | *(Smart)* | **Quality for Nvidia.**<br>Lower value = Better Quality, Larger File.<br>Defaults: `19` (H.265), `24` (AV1). |
+| `FFMPEG_CUSTOM_ARGS` | *(Empty)* | **Audio/Subtitles Override.**<br>Default behavior is `-c:a copy -c:s copy`.<br>Use this to convert audio, e.g., `-c:a aac -b:a 192k`. |
+| `NVIDIA_VISIBLE_DEVICES` | `all` | **GPU Selection.**<br>Set to your GPU UUID (e.g., `GPU-xxxx...`) or `all`. |
 | `UNRAID_UID` | `99` | User ID for file permissions (Standard Unraid: 99). |
 | `UNRAID_GID` | `100` | Group ID for file permissions (Standard Unraid: 100). |
 
@@ -147,7 +123,7 @@ You need to map two volumes in Docker/Unraid:
 
 ## 📜 License
 
-Distributed under the **GPL-3.0 license**. See `LICENSE` for more information.
+Distributed under the **GPL-3.0 License**. See `LICENSE` for more information.
 
 ---
 
