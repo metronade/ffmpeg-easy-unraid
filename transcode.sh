@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# Script: FFmpeg-Easy-Unraid (v6.0 - Nvidia Library Fix)
+# Script: FFmpeg-Easy-Unraid (v6.1 - Resolution Fix)
 # Author: metronade
 # ==============================================================================
 
@@ -104,14 +104,15 @@ check_paths() {
 }
 
 check_hardware() {
-    # CRITICAL FIX: Refresh library cache.
-    # Unraid injects Nvidia libs at runtime, but Ubuntu might not see them immediately.
+    # Refresh library cache for Nvidia
     ldconfig > /dev/null 2>&1
 
     local test_cmd=""
+    # FIX: Increased test resolution from 64x64 to 128x128
+    # Some Nvidia cards (Pascal+) require minimum dimensions for HEVC
     case "$METHOD" in
-        "nvidia_"*) test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_nvenc -f null -" ;;
-        "intel_"*)  test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=64x64 -vframes 1 -c:v hevc_vaapi -f null -" ;;
+        "nvidia_"*) test_cmd="ffmpeg -y -f lavfi -i color=c=black:s=128x128 -vframes 1 -c:v hevc_nvenc -f null -" ;;
+        "intel_"*)  test_cmd="ffmpeg -y -hwaccel vaapi -hwaccel_output_format vaapi -vaapi_device /dev/dri/renderD128 -f lavfi -i color=c=black:s=128x128 -vframes 1 -c:v hevc_vaapi -f null -" ;;
         *)          test_cmd="true" ;;
     esac
 
