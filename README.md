@@ -124,7 +124,7 @@ You need to map two volumes in Docker/Unraid:
 
 ## 📜 License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+Distributed under the **GPL-3.0 license**. See `LICENSE` for more information.
 
 ---
 
