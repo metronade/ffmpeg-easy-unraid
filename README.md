@@ -15,6 +15,7 @@
 It is designed to be robust ("fail-safe"), supporting modern hardware acceleration while protecting your server from freezing via intelligent CPU monitoring.
 
 ### Key Features
+* **Run-Once Workflow:** This container is designed to run on demand. It scans the `/import` directory on startup, processes the queue, and **stops automatically** when finished. It does not continuously monitor the folder to save resources. **To process a new batch, simply restart the container.**
 * **Modern Codecs:** Supports **H.265 (HEVC)** and **AV1**.
 * **Hardware Acceleration:** Full support for **Nvidia NVENC**, **Intel QuickSync/Arc**, and optimized CPU encoding.
 * **Smart Workflow:**
@@ -43,7 +44,6 @@ When adding or editing this container in Unraid:
 3. Add the following text to the end of the line (separated by a space):
    ```text
    --runtime=nvidia
-
 *(Note: Do not remove `--cap-add=SYS_NICE` if it is already there. Just add this after it.)*
 
 4. Find the Variable **"Nvidia Visible Devices"** (in Advanced View).
@@ -118,17 +118,17 @@ You need to map two volumes in Docker/Unraid:
 1. You place a TV Show folder `MySeries/Season 1/Episode 1.mkv` in `/import`.
 2. Script converts it and saves the new version to `/export/MySeries/Season 1/Episode 1.mkv`.
 3. Script moves the original to `/import/finished/MySeries/Season 1/Episode 1.mkv`.
+4. **Container Stops.** To convert new files later, simply restart the container.
 
 ---
 
 ## 📜 License
 
-Distributed under the **GPL-3.0 License**. See `LICENSE` for more information.
+Distributed under the **MIT License**. See `LICENSE` for more information.
 
 ---
 
 **Author:** [metronade](https://github.com/metronade)
-
 ```
 
 ```
